@@ -47,6 +47,8 @@ describe Chef::Provider::Mount::Mount, "load_current_resource" do
     ::File.stub!(:foreach).with("/etc/fstab")
     ::File.stub!(:exists?).with("/dev/sdz1").and_return true
     ::File.stub!(:exists?).with("/tmp/foo").and_return true
+    ::File.stub!(:exists?).with("d21afe51-a0fe-4dc6-9152-ac733763ae0a").and_return false
+    ::File.stub!(:exists?).with(nil).and_return false
 
     @status = mock("Status", :exitstatus => 0)
     @provider.stub!(:popen4).and_return(@status)
@@ -71,6 +73,15 @@ describe Chef::Provider::Mount::Mount, "load_current_resource" do
     @provider.load_current_resource()
   end
 
+  it "should accecpt device_type :uuid" do
+    @new_resource.stub!(:device_type).and_return(:uuid)
+    @new_resource.stub!(:device).and_return("d21afe51-a0fe-4dc6-9152-ac733763ae0a")
+    @stdout_findfs = mock("STDOUT", :first => "/dev/sdz1")
+    @provider.should_receive(:popen4).with("/sbin/findfs UUID=d21afe51-a0fe-4dc6-9152-ac733763ae0a").and_yield(@pid,@stdin,@stdout_findfs,@stderr).and_return(@status)
+    @provider.load_current_resource()
+  end
+
+  
   it "should raise an error if the mount device does not exist" do
     ::File.stub!(:exists?).with("/dev/sdz1").and_return false
     lambda { @provider.load_current_resource() }.should raise_error(Chef::Exceptions::Mount)
@@ -227,6 +238,17 @@ describe Chef::Provider::Mount::Mount, "mount_fs" do
     @stdout.stub!(:each).and_yield("#{@new_resource.device} on #{@new_resource.mount_point}")
     @provider.stub!(:popen4).and_yield(@pid, @stdin, @stdout, @stderr).and_return(0)
     @provider.should_receive(:run_command).with({:command => "mount -t #{@new_resource.fstype} #{@new_resource.device} #{@new_resource.mount_point}"})
+    @provider.mount_fs()
+  end
+  
+  it "should mount the filesystem specified by uuid" do
+    @new_resource.stub!(:device).and_return("d21afe51-a0fe-4dc6-9152-ac733763ae0a")
+    @new_resource.stub!(:device_type).and_return(:uuid)
+    @stdout_findfs = mock("STDOUT", :first => "/dev/sdz1")
+    @provider.stub!(:popen4).with("/sbin/findfs UUID=d21afe51-a0fe-4dc6-9152-ac733763ae0a").and_yield(@pid,@stdin,@stdout_findfs,@stderr).and_return(@status)
+    @stdout.stub!(:each).and_yield("#{@new_resource.device} on #{@new_resource.mount_point}")
+    @provider.stub!(:popen4).and_yield(@pid, @stdin, @stdout, @stderr).and_return(0)
+    @provider.should_receive(:run_command).with({:command => "mount -t #{@new_resource.fstype} -U #{@new_resource.device} #{@new_resource.mount_point}"})
     @provider.mount_fs()
   end
 
