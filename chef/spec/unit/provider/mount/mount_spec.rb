@@ -48,7 +48,7 @@ describe Chef::Provider::Mount::Mount, "load_current_resource" do
     ::File.stub!(:exists?).with("/dev/sdz1").and_return true
     ::File.stub!(:exists?).with("/tmp/foo").and_return true
     ::File.stub!(:exists?).with("d21afe51-a0fe-4dc6-9152-ac733763ae0a").and_return false
-    ::File.stub!(:exists?).with(nil).and_return false
+    ::File.stub!(:exists?).with(nil).and_raise TypeError
 
     @status = mock("Status", :exitstatus => 0)
     @provider.stub!(:popen4).and_return(@status)
@@ -89,6 +89,16 @@ describe Chef::Provider::Mount::Mount, "load_current_resource" do
 
   it "should raise an error if the mount point does not exist" do
     ::File.stub!(:exists?).with("/tmp/foo").and_return false
+    lambda { @provider.load_current_resource() }.should raise_error(Chef::Exceptions::Mount)
+  end
+
+  it "should raise an error if the mount device (uuid) does not exist" do
+    @new_resource.stub!(:device_type).and_return(:uuid)
+    @new_resource.stub!(:device).and_return("d21afe51-a0fe-4dc6-9152-ac733763ae0a")
+    status_findfs = mock("Status", :exitstatus => 1)
+    stdout_findfs = mock("STDOUT", :first => nil)
+    @provider.should_receive(:popen4).with("/sbin/findfs UUID=d21afe51-a0fe-4dc6-9152-ac733763ae0a").and_yield(@pid,@stdin,stdout_findfs,@stderr).and_return(status_findfs)
+    ::File.should_receive(:exists?).with("").and_return(false)
     lambda { @provider.load_current_resource() }.should raise_error(Chef::Exceptions::Mount)
   end
 
