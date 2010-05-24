@@ -158,7 +158,8 @@ describe Chef::Daemon do
       Dir.stub!(:chdir)
     end
 
-    it "should chdir to root" do
+    it "changes the working directory to root" do
+      Dir.rspec_reset
       Dir.should_receive(:chdir).with("/").and_return(0)
       Chef::Daemon.change_privilege
     end
@@ -251,5 +252,4 @@ describe Chef::Daemon do
     end
 
   end  
-
 end

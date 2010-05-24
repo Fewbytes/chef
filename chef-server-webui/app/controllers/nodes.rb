@@ -20,12 +20,11 @@
 
 require 'chef' / 'node'
 
-class ChefServerWebui::Nodes < ChefServerWebui::Application
+class Nodes < Application
   
   provides :html
   
   before :login_required
-  before :authorized_node, :only => [ :update, :destroy ]
   
   def index
     @node_list =  begin
@@ -86,14 +85,14 @@ class ChefServerWebui::Nodes < ChefServerWebui::Application
     begin      
       @node = Chef::Node.new
       @node.name params[:name]
-      @node.attribute = JSON.parse(params[:attributes])
+      @node.normal_attrs = JSON.parse(params[:attributes])
       @node.run_list.reset!(params[:for_node] ? params[:for_node] : [])
       raise ArgumentError, "Node name cannot be blank" if (params[:name].nil? || params[:name].length==0)
       @node.create
-      redirect(slice_url(:nodes), :message => { :notice => "Created Node #{@node.name}" })
+      redirect(url(:nodes), :message => { :notice => "Created Node #{@node.name}" })
     rescue => e
       Chef::Log.error("#{e}\n#{e.backtrace.join("\n")}")
-      @node.attribute = JSON.parse(params[:attributes])
+      @node.normal_attrs = JSON.parse(params[:attributes])
       @available_recipes = get_available_recipes 
       @available_roles = Chef::Role.list.keys.sort
       @node.run_list params[:for_node]
@@ -107,7 +106,7 @@ class ChefServerWebui::Nodes < ChefServerWebui::Application
     begin
       @node = Chef::Node.load(params[:id])
       @node.run_list.reset!(params[:for_node] ? params[:for_node] : [])
-      @node.attribute = JSON.parse(params[:attributes])
+      @node.normal_attrs = JSON.parse(params[:attributes])
       @node.save
       @_message = { :notice => "Updated Node" }
       render :show
@@ -126,7 +125,7 @@ class ChefServerWebui::Nodes < ChefServerWebui::Application
     begin
       @node = Chef::Node.load(params[:id])
       @node.destroy
-      redirect(absolute_slice_url(:nodes), {:message => { :notice => "Node #{params[:id]} deleted successfully" }, :permanent => true})
+      redirect(absolute_url(:nodes), {:message => { :notice => "Node #{params[:id]} deleted successfully" }, :permanent => true})
     rescue => e
       Chef::Log.error("#{e}\n#{e.backtrace.join("\n")}")
       @node_list = Chef::Node.list()

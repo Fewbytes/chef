@@ -37,7 +37,7 @@ class Chef
     include Chef::Mixin::GenerateURL
     include Chef::Mixin::Checksum
     
-    attr_accessor :node, :registration, :json_attribs, :node_name, :ohai, :rest
+    attr_accessor :node, :registration, :json_attribs, :node_name, :ohai, :rest, :compile
     
     # Creates a new Chef::Client.
     def initialize()
@@ -46,6 +46,8 @@ class Chef
       @json_attribs = nil
       @node_name = nil
       @node_exists = true
+      @runner = nil
+      @compile = nil
       @ohai = Ohai::System.new
       Chef::Log.verbose = Chef::Config[:verbose_logging]
       Mixlib::Authentication::Log.logger = Ohai::Log.logger = Chef::Log.logger
@@ -76,20 +78,53 @@ class Chef
     # === Returns
     # true:: Always returns true.
     def run
-      start_time = Time.now
-      Chef::Log.info("Starting Chef Run")
-      
-      determine_node_name
-      register
-      build_node(@node_name)
-      save_node
-      sync_cookbooks
-      converge
-      save_node
-      
-      end_time = Time.now
-      Chef::Log.info("Chef Run complete in #{end_time - start_time} seconds")
-      true
+      @runner = nil
+      @compile = nil
+      begin
+        start_time = Time.now
+        Chef::Log.info("Starting Chef Run")
+        
+        determine_node_name
+        register
+        build_node(@node_name)
+        save_node
+        sync_cookbooks
+        converge
+        save_node
+        
+        end_time = Time.now
+        elapsed_time = end_time - start_time
+        Chef::Log.info("Chef Run complete in #{elapsed_time} seconds")
+        run_report_handlers(start_time, end_time, elapsed_time) 
+        true
+      rescue Exception => e
+        run_exception_handlers(@node, @runner ? @runner : @compile, start_time, end_time, elapsed_time, e)
+        Chef::Log.error("Re-raising exception")
+        raise
+      end
+    end
+
+    def run_report_handlers(start_time, end_time, elapsed_time)
+      if Chef::Config[:report_handlers].length > 0
+        Chef::Log.info("Running report handlers")
+        Chef::Config[:report_handlers].each do |handler|
+          handler.report(@node, @runner, start_time, end_time, elapsed_time)
+        end
+        Chef::Log.info("Report handlers complete")
+      end
+    end
+
+    def run_exception_handlers(node, runner, start_time, end_time, elapsed_time, exception)
+      if Chef::Config[:exception_handlers].length > 0
+        end_time   ||= Time.now
+        elapsed_time ||= end_time - start_time 
+        Chef::Log.error("Received exception: #{exception.message}")
+        Chef::Log.error("Running exception handlers")
+        Chef::Config[:exception_handlers].each do |handler|
+          handler.report(node, runner, start_time, end_time, elapsed_time, exception)
+        end
+        Chef::Log.error("Exception handlers complete")
+      end
     end
     
     # Similar to Chef::Client#run, but instead of talking to the Chef server,
@@ -100,16 +135,26 @@ class Chef
     # === Returns
     # true:: Always returns true.
     def run_solo
-      start_time = Time.now
-      Chef::Log.info("Starting Chef Solo Run")
+      @runner = nil
+      @compile = nil
+      begin
+        start_time = Time.now
+        Chef::Log.info("Starting Chef Solo Run")
 
-      determine_node_name
-      build_node(@node_name, true)
-      converge(true)
-      
-      end_time = Time.now
-      Chef::Log.info("Chef Run complete in #{end_time - start_time} seconds")
-      true
+        determine_node_name
+        build_node(@node_name, true)
+        converge(true)
+        
+        end_time = Time.now
+        elapsed_time = end_time - start_time
+        Chef::Log.info("Chef Run complete in #{elapsed_time} seconds")
+        run_report_handlers(start_time, end_time, elapsed_time) 
+        true
+      rescue Exception => e
+        run_exception_handlers(@node, @runner ? @runner : @compile, start_time, end_time, elapsed_time, e)
+        Chef::Log.error("Re-raising exception")
+        raise
+      end
     end
 
     def run_ohai
@@ -161,15 +206,13 @@ class Chef
       end
       
       @node.consume_attributes(@json_attribs)
-      
-      ohai.each do |field, value|
-        Chef::Log.debug("Ohai Attribute: #{field} - #{value.inspect}")
-        @node[field] = value
-      end
+    
+      @node.automatic_attrs = ohai.data
+
       platform, version = Chef::Platform.find_platform_and_version(@node)
       Chef::Log.debug("Platform is #{platform} version #{version}")
-      @node[:platform] = platform
-      @node[:platform_version] = version
+      @node.automatic_attrs[:platform] = platform
+      @node.automatic_attrs[:platform_version] = version
       @node
     end
    
@@ -326,10 +369,12 @@ class Chef
           end
         end
       end
-      compile = Chef::Compile.new(@node)
+      @compile = Chef::Compile.new(@node)
+      @compile.go
       
       Chef::Log.debug("Converging node #{@node_name}")
-      Chef::Runner.new(@node, compile.collection, compile.definitions, compile.cookbook_loader).converge
+      @runner = Chef::Runner.new(@node, @compile.collection, @compile.definitions, @compile.cookbook_loader)
+      @runner.converge
       true
     end
     
