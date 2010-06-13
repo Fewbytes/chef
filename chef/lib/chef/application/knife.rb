@@ -95,7 +95,7 @@ class Chef::Application::Knife < Chef::Application
     :description => "Show the data after a destructive operation"
 
   option :format,
-    :short => "-f FORMAT",
+    :short => "-F FORMAT",
     :long => "--format FORMAT",
     :description => "Which format to use for output",
     :default => "json"
@@ -113,6 +113,7 @@ class Chef::Application::Knife < Chef::Application
     validate_and_parse_options
     knife = Chef::Knife.find_command(ARGV, self.class.options)
     knife.run
+    exit 0
   end
   
   private

@@ -121,10 +121,20 @@ class Chef
             break
           end
         end
-        config[:config_file] ||= File.join(ENV['HOME'], '.chef', 'knife.rb')
+        # If we haven't set a config yet and $HOME is set, and the home
+        # knife.rb exists, use it:
+        if (!config[:config_file]) && ENV['HOME'] && File.exist?(File.join(ENV['HOME'], '.chef', 'knife.rb'))
+          config[:config_file] = File.join(ENV['HOME'], '.chef', 'knife.rb')
+        end
       end
 
-      Chef::Config.from_file(config[:config_file]) 
+      # Don't try to load a knife.rb if it doesn't exist.
+      if config[:config_file]
+        Chef::Config.from_file(config[:config_file])
+      else
+        # ...but do log a message if no config was found.
+        Chef::Log.info("No knife configuration file found")
+      end
 
       Chef::Config[:log_level] = config[:log_level] if config[:log_level]
       Chef::Config[:log_location] = config[:log_location] if config[:log_location]
@@ -233,9 +243,17 @@ class Chef
       end
     end
 
-    def load_from_file(klass, from_file) 
-      from_file = @name_args[0]
-      relative_file = File.expand_path(File.join(Dir.pwd, 'roles', from_file))
+    def load_from_file(klass, from_file, bag=nil) 
+      relative_path = ""
+      if klass == Chef::Role
+        relative_path = "roles"
+      elsif klass == Chef::Node
+        relative_path = "nodes"
+      elsif klass == Chef::DataBagItem
+        relative_path = "data_bags/#{bag}"
+      end
+
+      relative_file = File.expand_path(File.join(Dir.pwd, relative_path, from_file))
       filename = nil
 
       if file_exists_and_is_readable?(from_file)

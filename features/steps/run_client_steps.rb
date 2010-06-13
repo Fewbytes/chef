@@ -16,13 +16,15 @@
 # limitations under the License.
 #
 
+CHEF_CLIENT = File.join(CHEF_PROJECT_ROOT, "chef", "bin", "chef-client")
+
 ###
 # When
 ###
 When /^I run the chef\-client$/ do
   @log_level ||= ENV["LOG_LEVEL"] ? ENV["LOG_LEVEL"] : "error"
   @chef_args ||= ""
-  @config_file ||= File.expand_path(File.join(File.dirname(__FILE__), '..', 'data', 'config', 'client.rb'))
+  @config_file ||= File.expand_path(File.join(configdir, 'client.rb'))
   status = Chef::Mixin::Command.popen4(
     "#{File.join(File.dirname(__FILE__), "..", "..", "chef", "bin", "chef-client")} -l #{@log_level} -c #{@config_file} #{@chef_args}") do |p, i, o, e|
     @stdout = o.gets(nil)
@@ -59,6 +61,13 @@ When /^I run the chef\-client at log level '(.+)'$/ do |log_level|
   @log_level = log_level.to_sym
   When "I run the chef-client"
 end
+
+When 'I run the chef-client with json attributes' do
+  @log_level = :debug
+  @chef_args = "-j #{File.join(FEATURES_DATA, 'json_attribs', 'attribute_settings.json')}"
+  When "I run the chef-client"
+end
+  
 
 When /^I run the chef\-client with config file '(.+)'$/ do |config_file|
   @config_file = config_file
@@ -154,6 +163,6 @@ Then /^'(.+)' should appear on '(.+)' '(.+)' times$/ do |to_match, which, count|
   seen_count.should == count.to_i
 end
 
-Then /^I inspect the contents of the features tmpdir$/ do
+Then "I inspect the contents of the features tmpdir" do
   puts `ls -halpR #{tmpdir}`
 end
