@@ -24,9 +24,12 @@ class Chef
       
       option :all, :short => '-a', :long => '--all', :boolean => true, :description => 'delete all versions'
 
+      option :purge, :short => '-p', :long => '--purge', :boolean => true, :description => 'Permanently remove files from backing data store'
+
       banner "Sub-Command: cookbook delete COOKBOOK VERSION (options)"
 
       def run
+        confirm("Files that are common to multiple cookbooks are shared, so purging the files may disable other cookbooks. Are you sure you want to purge files instead of just deleting the cookbook") if config[:purge]
         @cookbook_name, @version = name_args
         if @cookbook_name && @version
           delete_explicit_version
@@ -35,13 +38,15 @@ class Chef
         elsif @cookbook_name && @version.nil?
           delete_without_explicit_version
         elsif @cookbook_name.nil?
-          # fail
+          show_usage
+          Chef::Log.fatal("You must provide the name of the cookbook to delete")
+          exit(1)
         end
       end
 
       def delete_explicit_version
         delete_object(Chef::CookbookVersion, "#{@cookbook_name} version #{@version}", "cookbook") do
-          rest.delete_rest("cookbooks/#{@cookbook_name}/#{@version}")
+          delete_request("cookbooks/#{@cookbook_name}/#{@version}", config[:purge])
         end
       end
 
@@ -55,13 +60,16 @@ class Chef
         # got to the list of versions to delete and selected 'all'
         # and also a specific version
         @available_versions = nil
-        available_versions.each do |version|
+        Array(available_versions).each do |version|
           delete_version_without_confirmation(version)
         end
       end
 
       def delete_without_explicit_version
-        if available_versions.size == 1
+        if available_versions.nil?
+          # we already logged an error or 2 about it, so just bail
+          exit(1)
+        elsif available_versions.size == 1
           @version = available_versions.first
           delete_explicit_version
         else
@@ -75,6 +83,7 @@ class Chef
       rescue Net::HTTPServerException => e
         if e.to_s =~ /^404/
           Chef::Log.error("Cannot find a cookbook named #{@cookbook_name} to delete")
+          nil
         else
           raise
         end
@@ -106,7 +115,7 @@ class Chef
       end
 
       def delete_version_without_confirmation(version)
-        object = rest.delete_rest("cookbooks/#{@cookbook_name}/#{version}")
+        object = delete_request("cookbooks/#{@cookbook_name}/#{version}", config[:purge])
         output(format_for_display(object)) if config[:print_after]
         Chef::Log.info("Deleted cookbook[#{@cookbook_name}][#{version}]")
       end
@@ -120,6 +129,13 @@ class Chef
             delete_version_without_confirmation(version)
           end
         end
+      end
+      
+      private
+      
+      def delete_request(path, purge)
+        url = "cookbooks/#{@cookbook_name}/#{@version}#{purge ? "?purge=true" : ""}"
+        rest.delete_rest(url)
       end
 
     end
