@@ -181,12 +181,10 @@ class Chef
             if @new_resource.device_type == :device
               @real_device = @new_resource.device
             else
+              @real_device = ""
               status = popen4("/sbin/findfs #{device_fstab}") do |pid, stdin, stdout, stderr|
                 device_line = stdout.first # stdout.first consumes
                 @real_device = device_line.chomp unless device_line.nil?
-              end
-              unless status.exitstatus == 0
-                @real_device = ""
               end
             end
           end
