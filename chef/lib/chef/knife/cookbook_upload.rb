@@ -63,6 +63,11 @@ class Chef
             upload_cookbook(cookbook)
           end
         else
+          if @name_args.length < 1
+            show_usage
+            Chef::Log.fatal("You must specify the --all flag or at least one cookbook name")
+            exit 1
+          end
           @name_args.each do |cookbook_name|
             if cl.cookbook_exists?(cookbook_name)
               upload_cookbook(cl[cookbook_name])
@@ -133,7 +138,19 @@ class Chef
         end
         sandbox_url = new_sandbox['uri']
         Chef::Log.debug("Committing sandbox")
-        catch_auth_exceptions{ rest.put_rest(sandbox_url, {:is_completed => true}) }
+        # Retry if S3 is claims a checksum doesn't exist (the eventual
+        # in eventual consistency)
+        retries = 0
+        begin
+          catch_auth_exceptions{ rest.put_rest(sandbox_url, {:is_completed => true}) }
+        rescue Net::HTTPServerException => e
+          if e.to_s =~ /400 "Bad Request"/ && retries += 1 <= 1
+            sleep 2
+            retry
+          else
+            raise
+          end
+        end
 
         # files are uploaded, so save the manifest
         catch_auth_exceptions{ build_dir_cookbook.save }
