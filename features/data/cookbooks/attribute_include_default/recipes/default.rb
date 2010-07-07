@@ -1,7 +1,8 @@
 #
-# Author:: Daniel DeLeo (<dan@opscode.com>)
-# Copyright:: Copyright (c) 2010 Opscode, Inc.
-# License:: Apache License, Version 2.0
+# Cookbook Name:: recipe_include
+# Recipe:: second 
+#
+# Copyright 2009, Opscode
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,7 +15,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
 
-class Chef
-  VERSION = '0.9.7'
+execute "append to #{node[:tmpdir]}/mars_volta" do
+  command "echo '#{node.mars_volta} is #{node.mars_volta_is}' >> #{node[:tmpdir]}/mars_volta"
 end
+

@@ -20,7 +20,7 @@
 require 'rest_client'
 
 require 'chef/knife'
-require 'chef/streaming_cookbook_uploader'
+require 'chef/cookbook_loader'
 require 'chef/cache/checksum'
 require 'chef/sandbox'
 require 'chef/cookbook_version'
@@ -144,7 +144,7 @@ class Chef
         begin
           catch_auth_exceptions{ rest.put_rest(sandbox_url, {:is_completed => true}) }
         rescue Net::HTTPServerException => e
-          if e.to_s =~ /400 "Bad Request"/ && retries += 1 <= 1
+          if e.message =~ /^400/ && (retries += 1) <= 5
             sleep 2
             retry
           else

@@ -129,7 +129,7 @@ class Chef
     def run_report_handlers(run_status)
       Chef::Log.info("Running report handlers")
       Array(Chef::Config[:report_handlers]).each do |handler|
-        handler.run_report_safely(handler)
+        handler.run_report_safely(run_status)
       end
       Chef::Log.info("Report handlers complete")
     end
@@ -249,7 +249,7 @@ class Chef
       Chef::Log.debug("Synchronizing cookbook #{cookbook.name}")
 
       # files and templates are lazily loaded, and will be done later.
-      eager_segments = Array(Chef::CookbookVersion::COOKBOOK_SEGMENTS)
+      eager_segments = Chef::CookbookVersion::COOKBOOK_SEGMENTS.dup
       eager_segments.delete(:files)
       eager_segments.delete(:templates)
       
