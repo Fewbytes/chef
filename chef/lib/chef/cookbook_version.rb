@@ -39,7 +39,7 @@ class Chef
     COOKBOOK_SEGMENTS = [ :resources, :providers, :recipes, :definitions, :libraries, :attributes, :files, :templates, :root_files ]
     
     DESIGN_DOCUMENT = {
-      "version" => 5,
+      "version" => 7,
       "language" => "javascript",
       "views" => {
         "all" => {
@@ -89,8 +89,8 @@ class Chef
                 continue;
               }
               
-              var valueParts = value[1].split('.').map(function(v) { return parseInt(v); });
-              var resultParts = result[1].split('.').map(function(v) { return parseInt(v); });
+              var valueParts = value.split('.').map(function(v) { return parseInt(v); });
+              var resultParts = result.split('.').map(function(v) { return parseInt(v); });
 
               if (valueParts[0] != resultParts[0]) {
                 if (valueParts[0] > resultParts[0]) {
@@ -116,7 +116,7 @@ class Chef
           "map" => %q@
           function(doc) {
             if (doc.chef_type == "cookbook_version") {
-              emit(doc.cookbook_name, doc.version);
+              emit(doc.cookbook_name, {version: doc.version, id:doc._id});
             }
           }
           @,
@@ -132,8 +132,8 @@ class Chef
                 continue;
               }
 
-              var valueParts = value[1].split('.').map(function(v) { return parseInt(v); });
-              var resultParts = result[1].split('.').map(function(v) { return parseInt(v); });
+              var valueParts = value.version.split('.').map(function(v) { return parseInt(v); });
+              var resultParts = result.version.split('.').map(function(v) { return parseInt(v); });
 
               if (valueParts[0] != resultParts[0]) {
                 if (valueParts[0] > resultParts[0]) {
@@ -151,13 +151,14 @@ class Chef
                 }
               }
             }
-            return keys[idx][1];
+            return result;
           }
           @
         },
       }
     }
 
+    attr_accessor :root_dir
     attr_accessor :definition_filenames
     attr_accessor :template_filenames
     attr_accessor :file_filenames
@@ -210,6 +211,7 @@ class Chef
       @resource_filenames = Array.new
       @provider_filenames = Array.new
       @metadata_filenames = Array.new
+      @root_dir = nil
       @root_filenames = Array.new
       @couchdb_id = nil
       @couchdb = couchdb || Chef::CouchDB.new
@@ -473,113 +475,8 @@ class Chef
 
       records_by_pref[best_pref]
     end
-    
-    # Given a node, segment and path (filename or directory name),
-    # return the priority-ordered list of preference locations to
-    # look.
-    def preferences_for_path(node, segment, path)
-      # only files and templates can be platform-specific
-      if segment.to_sym == :files || segment.to_sym == :templates
-        begin
-          platform, version = Chef::Platform.find_platform_and_version(node)
-        rescue ArgumentError => e
-          # Skip platform/version if they were not found by find_platform_and_version
-          if e.message =~ /Cannot find a (?:platform|version)/
-            platform = "/unknown_platform/"
-            version = "/unknown_platform_version/"
-          else
-            raise
-          end
-        end
-        
-        fqdn = node[:fqdn]
-
-        # Most specific to least specific places to find the path
-        [
-         File.join(segment.to_s, "host-#{fqdn}", path),
-         File.join(segment.to_s, "#{platform}-#{version}", path),
-         File.join(segment.to_s, platform.to_s, path),
-         File.join(segment.to_s, "default", path)
-        ]
-      else
-        [File.join(segment, path)]
-      end
-    end
-    private :preferences_for_path
 
 
-    def relative_filenames_in_preferred_directory(node, segment, dirname)
-      preferences = preferences_for_path(node, segment, dirname)
-      filenames_by_pref = Hash.new
-      preferences.each { |pref| filenames_by_pref[pref] = Array.new }
-
-      manifest[segment].each do |manifest_record|
-        manifest_record_path = manifest_record[:path]
-
-        # find the NON SPECIFIC filenames, but prefer them by filespecificity.
-        # For example, if we have a file:
-        # 'files/default/somedir/somefile.conf' we only keep
-        # 'somedir/somefile.conf'. If there is also
-        # 'files/$hostspecific/somedir/otherfiles' that matches the requested
-        # hostname specificity, that directory will win, as it is more specific.
-        #
-        # This is clearly ugly b/c the use case is for remote directory, where
-        # we're just going to make cookbook_files out of these and make the
-        # cookbook find them by filespecificity again. but it's the shortest
-        # path to "success" for now.
-        if manifest_record_path =~ /(#{Regexp.escape(segment.to_s)}\/[^\/]+\/#{Regexp.escape(dirname)})\/.+$/
-          specificity_dirname = $1
-          non_specific_path = manifest_record_path[/#{Regexp.escape(segment.to_s)}\/[^\/]+\/#{Regexp.escape(dirname)}\/(.+)$/, 1]
-          # Record the specificity_dirname only if it's in the list of
-          # valid preferences
-          if filenames_by_pref[specificity_dirname]
-            filenames_by_pref[specificity_dirname] << non_specific_path
-          end
-        end
-      end
-
-      best_pref = preferences.find { |pref| !filenames_by_pref[pref].empty? }
-
-      raise Chef::Exceptions::FileNotFound, "cookbook #{name} has no directory #{segment}/#{dirname}" unless best_pref
-
-      filenames_by_pref[best_pref]
-
-    end
-
-    # Determine the manifest records from the most specific directory
-    # for the given node. See #preferred_manifest_record for a
-    # description of entries of the returned Array.
-    def preferred_manifest_records_for_directory(node, segment, dirname)
-      preferences = preferences_for_path(node, segment, dirname)
-      records_by_pref = Hash.new
-      preferences.each { |pref| records_by_pref[pref] = Array.new }
-
-      manifest[segment].each do |manifest_record|
-        manifest_record_path = manifest_record[:path]
-
-        # extract the preference part from the path.
-        if manifest_record_path =~ /(#{Regexp.escape(segment.to_s)}\/[^\/]+\/#{Regexp.escape(dirname)})\/.+$/
-          # Note the specificy_dirname includes the segment and
-          # dirname argument as above, which is what
-          # preferences_for_path returns. It could be
-          # "files/ubuntu-9.10/dirname", for example.
-          specificity_dirname = $1
-          
-          # Record the specificity_dirname only if it's in the list of
-          # valid preferences
-          if records_by_pref[specificity_dirname]
-            records_by_pref[specificity_dirname] << manifest_record
-          end
-        end
-      end
-      
-      best_pref = preferences.find { |pref| !records_by_pref[pref].empty? }
-        
-      raise Chef::Exceptions::FileNotFound, "cookbook #{name} has no directory #{segment}/#{dirname}" unless best_pref
-
-      records_by_pref[best_pref]
-    end
-    
     # Given a node, segment and path (filename or directory name),
     # return the priority-ordered list of preference locations to
     # look.
@@ -656,6 +553,20 @@ class Chef
       rendered_manifest
     end
 
+    def metadata_json_file
+      File.join(root_dir, "metadata.json")
+    end
+
+    def metadata_rb_file
+      File.join(root_dir, "metadata.rb")
+    end
+
+    def reload_metadata!
+      if File.exists?(metadata_json_file)
+        metadata.from_json(IO.read(metadata_json_file))
+      end
+    end
+
     ##
     # REST API
     ##
@@ -727,7 +638,7 @@ class Chef
     def self.cdb_list_latest(inflate=false, couchdb=nil)
       couchdb ||= Chef::CouchDB.new
       if inflate
-        doc_ids = cdb_list_latest_ids
+        doc_ids = cdb_list_latest_ids.map {|i|i["id"]}
         couchdb.bulk_get(doc_ids)
       else
         results = couchdb.get_view("cookbooks", "all_latest_version", :group=>true)["rows"]

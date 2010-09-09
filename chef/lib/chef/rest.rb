@@ -182,7 +182,9 @@ class Chef
             response_body = res.body.chomp
             JSON.parse(response_body)
           else
-            if raw
+            if method == :HEAD
+              true
+            elsif raw
               tf
             else
               res.body
@@ -190,6 +192,8 @@ class Chef
           end
         elsif res.kind_of?(Net::HTTPFound) or res.kind_of?(Net::HTTPMovedPermanently)
           follow_redirect {run_request(:GET, create_url(res['location']), {}, false, nil, raw)}
+        elsif res.kind_of?(Net::HTTPNotModified)
+          false
         else
           if res['content-type'] =~ /json/
             exception = JSON.parse(res.body)
@@ -369,12 +373,14 @@ class Chef
       response.read_body do |chunk|
         tf.write(chunk)
         size += chunk.size
-        if size == 0
-          Chef::Log.debug("#{url.path} done (0 length file)")
-        elsif total == 0
-          Chef::Log.debug("#{url.path} (zero content length or no Content-Length header)")
-        else
-          Chef::Log.debug("#{url.path}" + " %d%% done (%d of %d)" % [(size * 100) / total, size, total])
+        if Chef::Log.verbose
+          if size == 0
+            Chef::Log.debug("#{url.path} done (0 length file)")
+          elsif total == 0
+            Chef::Log.debug("#{url.path} (zero content length or no Content-Length header)")
+          else
+            Chef::Log.debug("#{url.path}" + " %d%% done (%d of %d)" % [(size * 100) / total, size, total])
+          end
         end
       end
       tf.close

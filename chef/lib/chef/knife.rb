@@ -151,6 +151,18 @@ class Chef
       subcommand_class || subcommand_not_found!(args)
     end
 
+    protected
+
+    def load_late_dependency(dep, gem_name = nil)
+      begin
+        require dep
+      rescue LoadError
+        gem_name ||= dep.gsub('/', '-')
+        Chef::Log.fatal "#{gem_name} is not installed. run \"gem install #{gem_name}\" to install it."
+        exit 1
+      end
+    end
+
     private
 
     # :nodoc:
@@ -255,7 +267,6 @@ class Chef
       Chef::Config[:node_name] = config[:node_name] if config[:node_name]
       Chef::Config[:client_key] = config[:client_key] if config[:client_key]
       Chef::Config[:chef_server_url] = config[:chef_server_url] if config[:chef_server_url]
-      Mixlib::Log::Formatter.show_time = false
       Chef::Log.init(Chef::Config[:log_location])
       Chef::Log.level(Chef::Config[:log_level])
 

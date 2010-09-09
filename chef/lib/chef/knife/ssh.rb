@@ -98,8 +98,8 @@ class Chef
 
           if config[:identity_file]
             session.use item, :keys => File.expand_path(config[:identity_file])
-          elsif config[:password]
-            session.use item, :password => config[:password]
+          elsif config[:ssh_password]
+            session.use item, :password => config[:ssh_password]
           else
             session.use item
           end
@@ -268,10 +268,10 @@ class Chef
       end
 
       def load_late_dependencies
-        require 'net/ssh/multi'
         require 'readline'
-        require 'highline'
-
+        %w[net/ssh/multi highline].each do |dep|
+          load_late_dependency dep
+        end
         assert_net_ssh_version_acceptable!
       end
 

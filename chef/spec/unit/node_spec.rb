@@ -30,6 +30,10 @@ describe Chef::Node do
     node.name.should == 'solo-node'
   end
 
+  it "should validate the name of the node" do
+    lambda{Chef::Node.build('solo node')}.should raise_error(Chef::Exceptions::ValidationFailed)
+  end
+
   describe "when the node does not exist on the server" do
     before do
       response = OpenStruct.new(:code => '404')
@@ -85,6 +89,11 @@ describe Chef::Node do
     it "cannot be blank" do
       lambda { @node.name("")}.should raise_error(Chef::Exceptions::ValidationFailed)
     end
+
+    it "should not accept name doesn't match /^[\-[:alnum:]_:.]+$/" do
+      lambda { @node.name("space in it")}.should raise_error(Chef::Exceptions::ValidationFailed)
+    end
+
   end
 
   describe "attributes" do
@@ -213,6 +222,10 @@ describe Chef::Node do
   
   describe "consuming json" do
 
+    before do
+      @ohai_data = {:platform => 'foo', :platform_version => 'bar'}
+    end
+
     it "consumes the run list portion of a collection of attributes and returns the remainder" do
       attrs = {"run_list" => [ "role[base]", "recipe[chef::server]" ], "foo" => "bar"}
       @node.consume_run_list(attrs).should == {"foo" => "bar"}
@@ -242,34 +255,34 @@ describe Chef::Node do
     end
 
     it "should add json attributes to the node" do
-      @node.consume_attributes "one" => "two", "three" => "four"
+      @node.consume_external_attrs(@ohai_data, {"one" => "two", "three" => "four"})
       @node.one.should eql("two")
       @node.three.should eql("four")
     end
 
     it "should set the tags attribute to an empty array if it is not already defined" do
-      @node.consume_attributes({})
+      @node.consume_external_attrs(@ohai_data, {})
       @node.tags.should eql([])
     end
 
     it "should not set the tags attribute to an empty array if it is already defined" do
       @node[:tags] = [ "radiohead" ]
-      @node.consume_attributes({})
+      @node.consume_external_attrs(@ohai_data, {})
       @node.tags.should eql([ "radiohead" ])
     end
     
     it "deep merges attributes instead of overwriting them" do
-      @node.consume_attributes "one" => {"two" => {"three" => "four"}}
+      @node.consume_external_attrs(@ohai_data, "one" => {"two" => {"three" => "four"}})
       @node.one.to_hash.should == {"two" => {"three" => "four"}}
-      @node.consume_attributes "one" => {"abc" => "123"}
-      @node.consume_attributes "one" => {"two" => {"foo" => "bar"}}
+      @node.consume_external_attrs(@ohai_data, "one" => {"abc" => "123"})
+      @node.consume_external_attrs(@ohai_data, "one" => {"two" => {"foo" => "bar"}})
       @node.one.to_hash.should == {"two" => {"three" => "four", "foo" => "bar"}, "abc" => "123"}
     end
     
     it "gives attributes from JSON priority when deep merging" do
-      @node.consume_attributes "one" => {"two" => {"three" => "four"}}
+      @node.consume_external_attrs(@ohai_data, "one" => {"two" => {"three" => "four"}})
       @node.one.to_hash.should == {"two" => {"three" => "four"}}
-      @node.consume_attributes "one" => {"two" => {"three" => "forty-two"}}
+      @node.consume_external_attrs(@ohai_data, "one" => {"two" => {"three" => "forty-two"}})
       @node.one.to_hash.should == {"two" => {"three" => "forty-two"}}
     end
     
@@ -283,27 +296,27 @@ describe Chef::Node do
     it "clears the default and override attributes" do
       @node.default_attrs["foo"] = "bar"
       @node.override_attrs["baz"] = "qux"
-      @node.process_external_attrs(@ohai_data, {})
+      @node.consume_external_attrs(@ohai_data, {})
       @node.reset_defaults_and_overrides
       @node.default_attrs.should be_empty
       @node.override_attrs.should be_empty
     end
 
     it "sets its platform according to platform detection" do
-      @node.process_external_attrs(@ohai_data, {})
+      @node.consume_external_attrs(@ohai_data, {})
       @node.automatic_attrs[:platform].should == 'foobuntu'
       @node.automatic_attrs[:platform_version].should == '23.42'
     end
 
     it "consumes the run list from provided json attributes" do
-      @node.process_external_attrs(@ohai_data, {"run_list" => ['recipe[unicorn]']})
+      @node.consume_external_attrs(@ohai_data, {"run_list" => ['recipe[unicorn]']})
       @node.run_list.should == ['recipe[unicorn]']
     end
 
     it "saves non-runlist json attrs for later" do
       expansion = Chef::RunList::RunListExpansion.new([])
       @node.run_list.stub!(:expand).and_return(expansion)
-      @node.process_external_attrs(@ohai_data, {"foo" => "bar"})
+      @node.consume_external_attrs(@ohai_data, {"foo" => "bar"})
       @node.expand!
       @node.normal_attrs.should == {"foo" => "bar", "tags" => []}
     end
@@ -393,7 +406,7 @@ describe Chef::Node do
   describe "from file" do
     it "should load a node from a ruby file" do
       @node.from_file(File.expand_path(File.join(CHEF_SPEC_DATA, "nodes", "test.rb")))
-      @node.name.should eql("test.example.com short")
+      @node.name.should eql("test.example.com-short")
       @node.sunshine.should eql("in")
       @node.something.should eql("else")
       @node.recipes.should == ["operations-master", "operations-monitoring"]
@@ -414,7 +427,7 @@ describe Chef::Node do
       File.stub!(:exists?).and_return(true)
       File.should_receive(:exists?).with(File.join(Chef::Config[:node_path], "test.example.com.rb")).and_return(false)
       @node.find_file("test.example.com")
-      @node.name.should == "test.example.com short"
+      @node.name.should == "test.example.com-short"
     end
     
     it "should load a node from the default file" do
@@ -422,7 +435,7 @@ describe Chef::Node do
       File.should_receive(:exists?).with(File.join(Chef::Config[:node_path], "test.example.com.rb")).and_return(false)
       File.should_receive(:exists?).with(File.join(Chef::Config[:node_path], "test.rb")).and_return(false)
       @node.find_file("test.example.com")
-      @node.name.should == "test.example.com default"
+      @node.name.should == "test.example.com-default"
     end
     
     it "should raise an ArgumentError if it cannot find any node file at all" do

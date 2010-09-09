@@ -25,6 +25,8 @@ class Chef
 
       banner "knife ec2 server create [RUN LIST...] (options)"
 
+      attr_accessor :initial_sleep_delay
+
       option :flavor,
         :short => "-f FLAVOR",
         :long => "--flavor FLAVOR",
@@ -48,6 +50,11 @@ class Chef
         :long => "--availability-zone ZONE",
         :description => "The Availability Zone",
         :default => "us-east-1b"
+
+      option :chef_node_name,
+        :short => "-N NAME",
+        :long => "--node-name NAME",
+        :description => "The Chef node name for your new node"
 
       option :ssh_key_name,
         :short => "-S KEY",
@@ -140,8 +147,8 @@ class Chef
 
         # wait for it to be ready to do stuff
         server.wait_for { print "."; ready? }
-        puts "#{h.color("\nWaiting 10 seconds for SSH Host Key generation on", :magenta)}: #{server.dns_name}"
-        sleep 10
+        puts "#{h.color("\nWaiting #{@initial_sleep_delay ||= 10} seconds for SSH Host Key generation on", :magenta)}: #{server.dns_name}"
+        sleep @initial_sleep_delay ||= 10
 
         print "\n"
 
@@ -152,11 +159,11 @@ class Chef
 
         begin
           bootstrap = Chef::Knife::Bootstrap.new
-          bootstrap.name_args = server.dns_name
+          bootstrap.name_args = [server.dns_name]
           bootstrap.config[:run_list] = @name_args
           bootstrap.config[:ssh_user] = config[:ssh_user]
           bootstrap.config[:identity_file] = config[:identity_file]
-          bootstrap.config[:chef_node_name] = server.id
+          bootstrap.config[:chef_node_name] = config[:chef_node_name] || server.id
           bootstrap.config[:prerelease] = config[:prerelease]
           bootstrap.config[:distro] = config[:distro]
           bootstrap.config[:use_sudo] = true
@@ -188,4 +195,3 @@ class Chef
     end
   end
 end
-
