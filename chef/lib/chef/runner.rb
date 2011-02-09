@@ -75,6 +75,11 @@ class Chef
     # Iterates over the +resource_collection+ in the +run_context+ calling
     # +run_action+ for each resource in turn.
     def converge
+      # Create notifications for subscription in subscription_queue
+      run_context.subscription_queue.each do |notification_spec|
+        run_context.resource_collection.find(notification_spec[:notifying_resource]).\
+          notifies(notification_spec[:action], notification_spec[:resource], notification_spec[:timing])
+      end
       # Resolve all lazy/forward references in notifications
       run_context.resource_collection.each do |resource|
         resource.resolve_notification_references

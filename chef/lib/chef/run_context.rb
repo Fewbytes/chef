@@ -36,6 +36,8 @@ class Chef
     # Needs to be settable so deploy can run a resource_collection independent
     # of any cookbooks.
     attr_accessor :resource_collection
+   
+    attr_reader :subscription_queue # for lazy notifications via subscribes method
 
     # Creates a new Chef::RunContext object and populates its fields. This object gets
     # used by the Chef Server to generate a fully compiled recipe list for a node.
@@ -46,6 +48,7 @@ class Chef
       @node = node
       @cookbook_collection = cookbook_collection
       @resource_collection = Chef::ResourceCollection.new
+      @subscription_queue = Array.new
       @definitions = Hash.new
       
       # TODO: 5/18/2010 cw/timh - See note on Chef::Node's

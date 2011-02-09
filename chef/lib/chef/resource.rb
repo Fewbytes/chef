@@ -290,7 +290,11 @@ F
     def subscribes(action, resources, timing=:delayed)
       resources = [resources].flatten
       resources.each do |resource|
-        resource.notifies(action, self, timing)
+        if resource.kind_of? Chef::Resource
+          resource.notifies(action, self, timing)
+        else
+          run_context.subscription_queue << {:notifying_resource => resource, :action => action, :timing => timing, :resource => self}
+        end
       end
       true
     end

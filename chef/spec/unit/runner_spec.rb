@@ -75,7 +75,7 @@ describe Chef::Runner do
     @mock_resource = mock("Resource", :null_object => true)
     new_runner
   end
-  
+
   it "should pass each resource in the collection to a provider" do
     @run_context.resource_collection.should_receive(:execute_each_resource).once
     @runner.converge
@@ -114,6 +114,15 @@ describe Chef::Runner do
     Chef::Provider::SnakeOil.stub!(:new).once.and_return(provider)
     provider.stub!(:action_sell).once.and_raise(ArgumentError)
     lambda { @runner.converge }.should_not raise_error(ArgumentError)
+  end
+  
+  it "should assign notifications from subscription queue" do
+    second_resource = Chef::Resource::Cat.new("peanut", @run_context)
+    second_resource.action = :purr
+    second_resource.subscribes(:purr, "cat[loulou1]", :immediately)
+    @run_context.resource_collection << second_resource
+    @runner.converge
+    second_resource.should be_updated
   end
   
   it "should execute immediate actions on changed resources" do
