@@ -459,11 +459,17 @@ F
           class << cls
             include Chef::Mixin::FromFile
             
+            attr_reader :default_action
+
             def actions_to_create
               @actions_to_create
             end
             
             define_method(:actions) do |*action_names|
+              if action_names.last.is_a? Hash
+                action_options = action_names.pop
+                @default_action = action_options[:default] if action_options.has_key? :default
+              end
               actions_to_create.push(*action_names)
             end
           end
@@ -479,6 +485,7 @@ F
             args_run_context = optional_args.shift
             @resource_name = rname.to_sym
             old_init.bind(self).call(name, args_run_context)
+            @action = self.class.default_action
             allowed_actions.push(self.class.actions_to_create).flatten!
           end
         end
