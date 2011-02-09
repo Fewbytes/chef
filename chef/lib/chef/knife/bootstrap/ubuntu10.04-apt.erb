@@ -1,4 +1,5 @@
 bash -c '
+export PATH="/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin:$PATH"
 if [ ! -f /usr/bin/chef-client ]; then
   echo "chef	chef/chef_server_url	string	<%= Chef::Config[:chef_server_url] %>" | debconf-set-selections 
   [ -f /etc/apt/sources.list.d/opscode.list ] || echo "deb http://apt.opscode.com lucid main" > /etc/apt/sources.list.d/opscode.list

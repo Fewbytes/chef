@@ -1,4 +1,5 @@
 bash -c '
+export PATH="/sbin:/usr/sbin:/usr/local/sbin:/bin:/usr/bin:/usr/local/bin:$PATH"
 if [ ! -f /usr/bin/chef-client ]; then
   apt-get update
   apt-get install -y ruby ruby1.8-dev build-essential wget libruby-extras libruby1.8-extras
