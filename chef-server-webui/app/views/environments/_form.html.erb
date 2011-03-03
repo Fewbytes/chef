@@ -31,9 +31,40 @@
             <th class="version" id="CookbookVersionConstraints">Version</th>
             <th class="last" id="CookbookVersionConstraints">&nbsp;</th>
           </tr>
+          <tr id="cbVerAddRow">
+              <td>
+                <select size="1" name="cookbook_selector"
+                        id="cookbook_name_0000"
+                        onchange="jQuerySuggest('0000')"
+                        onfocus="clearCookbookError()">
+                  <option value=""></option>
+                  <% @cookbooks.each do |book| %>
+                  <option value="<%= book %>"><%= book %></option>
+                  <% end %>
+                </select>
+              </td>
+              <td>
+                <select size="1" name="cookbook_operator_selector"
+                        id="cookbook_operator_selector">
+                  <% constraint_operators.each do |op| %>
+                  <option value="<%= op %>"><%= op %></option>
+                  <% end %>
+                </select>
+              </td>
+              <td>
+                <input id="cookbook_version_0000"
+                       class="text" name="cookbook_version_selector" 
+                       onfocus="clearVersionBox(this, '0000')"
+                       onblur="validateVersionBoxValue(this, '0000')"
+                       value="0.0.0">
+              </td>
+              <td>
+                <a href="javascript:void(0)"
+                   onclick="addTableRow0000()">Add</a>
+              </td>
+            </tr>
         </tbody>
       </table>
-      <a href='javascript:void(0)' onclick='addTableRow(null, ">=", "0.0.0")'>Add Cookbook Version Constraint</a>
     </div>
 
     <div class="group form attrEditor">
@@ -52,19 +83,9 @@
   <% end =%>
 </div>
 
-<script type='text/javascript' charset="utf-8" src="/javascripts/cookbook_constraint_ctrl.js"></script>
 <script type='text/javascript'>
-var cookbook_names = <%= @cookbooks.to_json %>;
-
-isEdit = document.getElementById('edit');
-if (isEdit != null){
-  <%unless @environment.cookbook_versions.nil? || @environment.cookbook_versions.empty?%>
-    var existing_env_cookbook_version_constraints = <%= @environment.cookbook_versions.to_json %>;
-    for (var cookbook in existing_env_cookbook_version_constraints){
-      var operator = existing_env_cookbook_version_constraints[cookbook].split(" ")[0];
-      var version = existing_env_cookbook_version_constraints[cookbook].split(" ")[1];
-      addTableRow(cookbook, operator, version);
-    }
-  <% end %>
-}
+  function cookbook_versions() {
+    return <%= cookbook_version_constraints.to_json %>;
+  }
 </script>
+<script type='text/javascript' charset="utf-8" src="/javascripts/cookbook_constraint_ctrl.js"></script>

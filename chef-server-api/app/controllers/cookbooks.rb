@@ -24,6 +24,8 @@ require 'chef/cookbook/metadata'
 
 class Cookbooks < Application
 
+  include Merb::CookbookVersionHelper
+
   provides :json
 
   before :authenticate_every
@@ -39,22 +41,21 @@ class Cookbooks < Application
   include Chef::Mixin::Checksum
   include Merb::TarballHelper
 
+  # returns data in the format of:
+  # {"apache2" => {
+  #     :url => "http://url",
+  #     :versions => [{:url => "http://url/1.0.0", :version => "1.0.0"}, {:url => "http://url/0.0.1", :version=>"0.0.1"}]
+  #   }
+  # }
   def index
-    cookbook_list = Chef::CookbookVersion.cdb_list_latest.keys.sort
-    response = Hash.new
-    cookbook_list.map! do |cookbook_name|
-      response[cookbook_name] = absolute_url(:cookbook, :cookbook_name => cookbook_name)
-    end
-    display response
-  end
-
-  def index_latest
-    cookbook_list = Chef::CookbookVersion.cdb_list_latest(true)
-    response = cookbook_list.inject({}) do |res, cv|
-      res[cv.name] = absolute_url(:cookbook_version, :cookbook_name => cv.name, :cookbook_version => cv.version)
+    cookbook_list = Chef::CookbookVersion.cdb_list
+    # cookbook_list is in the format of {"apache2" => [0.0.1, 0.0.0]} where the version numbers are Chef::Version objects
+    num_versions = num_versions!
+    display(cookbook_list.inject({}) {|res, (cookbook_name, versions)|
+      versions = versions.map{ |x| Chef::Version.new(x) }.sort.reverse.map{ |x| x.to_s }
+      res[cookbook_name] = expand_cookbook_urls(cookbook_name, versions, num_versions)
       res
-    end
-    display response
+    })
   end
 
   def index_recipes
@@ -66,10 +67,20 @@ class Cookbooks < Application
     display recipes_with_versions
   end
 
+  # GET /cookbooks/:cookbook_name
+  #
+  # returns data in the format of:
+  # {"apache2" => {
+  #     :url => "http://url",
+  #     :versions => [{:url => "http://url/1.0.0", :version => "1.0.0"}, {:url => "http://url/0.0.1", :version=>"0.0.1"}]
+  #   }
+  # }
   def show_versions
     versions = Chef::CookbookVersion.cdb_by_name(cookbook_name)
     raise NotFound, "Cannot find a cookbook named #{cookbook_name}" unless versions && versions.size > 0
-    display versions
+    num_versions = num_versions!("all")
+    cb_versions = versions[cookbook_name].map{ |x| Chef::Version.new(x) }.sort.reverse.map{ |x| x.to_s }
+    display({ cookbook_name => expand_cookbook_urls(cookbook_name, cb_versions, num_versions) })
   end
 
   def show

@@ -34,9 +34,9 @@ describe Chef::Knife do
   end
 
   it "builds a list of the core subcommand file require paths" do
-    Chef::Knife::DEFAULT_SUBCOMMAND_FILES.should_not be_empty
-    Chef::Knife::DEFAULT_SUBCOMMAND_FILES.each do |require_path|
-      require_path.should match(%w{chef knife .*}.join(Regexp.escape(File::SEPARATOR)))
+    Chef::Knife.find_subcommand_files.should_not be_empty
+    Chef::Knife.find_subcommand_files.each do |require_path|
+      require_path.should match(/chef\/knife\/.*|plugins\/knife\/.*/)
     end
   end
 
@@ -222,6 +222,34 @@ describe Chef::Knife do
         response = @knife.format_for_display(input)
         response["run_list"][0].should == "role[monkey]"
         response["run_list"][1].should == "role[churchmouse]"
+      end
+    end
+  end
+
+  describe "format_cookbook_list_for_display" do
+    before(:each) do
+      @item = {
+        "cookbook_name" => {
+          "url" => "http://url/cookbooks/cookbook",
+          "versions" => [
+            { "version" => "3.0.0", "url" => "http://url/cookbooks/3.0.0" },
+            { "version" => "2.0.0", "url" => "http://url/cookbooks/2.0.0" },
+            { "version" => "1.0.0", "url" => "http://url/cookbooks/1.0.0" }
+          ]
+        }
+      }
+    end
+
+    it "should return an array of the versions" do
+      expected_response = { "cookbook_name" => ["3.0.0","2.0.0","1.0.0"]}
+      response = @knife.format_cookbook_list_for_display(@item)
+      response.should == expected_response
+    end
+
+    describe "with --with-uri" do
+      it "should return the raw data" do
+        @knife.config[:with_uri] = true
+        @knife.format_cookbook_list_for_display(@item).should == @item
       end
     end
   end

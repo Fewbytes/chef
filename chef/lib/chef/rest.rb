@@ -22,7 +22,7 @@
 
 require 'net/https'
 require 'uri'
-require 'chef/json'
+require 'chef/json_compat'
 require 'tempfile'
 require 'chef/api_client'
 require 'chef/rest/auth_credentials'
@@ -79,9 +79,10 @@ class Chef
             Chef::Log.debug("Registration response: #{response.inspect}")
             raise Chef::Exceptions::CannotWritePrivateKey, "The response from the server did not include a private key!" unless response.has_key?("private_key")
             # Write out the private key
-            file = ::File.open(destination, File::WRONLY|File::EXCL|File::CREAT, 0600)
-            file.print(response["private_key"])
-            file.close
+            ::File.open(destination, "w") {|f|
+              f.chmod(0600)
+              f.print(response["private_key"])
+            }
             throw :done
           rescue IOError
             raise Chef::Exceptions::CannotWritePrivateKey, "I cannot write your private key to #{destination}"
@@ -162,7 +163,7 @@ class Chef
     #
     # Will return the body of the response on success.
     def run_request(method, url, headers={}, data=false, limit=nil, raw=false)
-      json_body = data ? Chef::JSON.to_json(data) : nil
+      json_body = data ? Chef::JSONCompat.to_json(data) : nil
       headers = build_headers(method, url, headers, json_body, raw)
 
       tf = nil
@@ -180,7 +181,7 @@ class Chef
         if res.kind_of?(Net::HTTPSuccess)
           if res['content-type'] =~ /json/
             response_body = res.body.chomp
-            Chef::JSON.from_json(response_body)
+            Chef::JSONCompat.from_json(response_body)
           else
             if method == :HEAD
               true
@@ -196,7 +197,7 @@ class Chef
           false
         else
           if res['content-type'] =~ /json/
-            exception = Chef::JSON.from_json(res.body)
+            exception = Chef::JSONCompat.from_json(res.body)
             msg = "HTTP Request Returned #{res.code} #{res.message}: "
             msg << (exception["error"].respond_to?(:join) ? exception["error"].join(", ") : exception["error"].to_s)
             Chef::Log.warn(msg)
@@ -208,7 +209,7 @@ class Chef
 
     # Runs an HTTP request to a JSON API. File Download not supported.
     def api_request(method, url, headers={}, data=false)
-      json_body = data ? Chef::JSON.to_json(data) : nil
+      json_body = data ? Chef::JSONCompat.to_json(data) : nil
       headers = build_headers(method, url, headers, json_body)
 
       retriable_rest_request(method, url, json_body, headers) do |rest_request|
@@ -216,7 +217,7 @@ class Chef
 
         if response.kind_of?(Net::HTTPSuccess)
           if response['content-type'] =~ /json/
-            Chef::JSON.from_json(response.body.chomp)
+            Chef::JSONCompat.from_json(response.body.chomp)
           else
             Chef::Log.warn("Expected JSON response, but got content-type '#{response['content-type']}'")
             response.body
@@ -225,7 +226,7 @@ class Chef
           follow_redirect {api_request(:GET, create_url(redirect_location))}
         else
           if response['content-type'] =~ /json/
-            exception = Chef::JSON.from_json(response.body)
+            exception = Chef::JSONCompat.from_json(response.body)
             msg = "HTTP Request Returned #{response.code} #{response.message}: "
             msg << (exception["error"].respond_to?(:join) ? exception["error"].join(", ") : exception["error"].to_s)
             Chef::Log.warn(msg)
@@ -246,7 +247,7 @@ class Chef
       headers = build_headers(:GET, url, headers, nil, true)
       retriable_rest_request(:GET, url, nil, headers) do |rest_request|
         tempfile = nil
-        response = rest_request.call do |r| 
+        response = rest_request.call do |r|
           if block_given? && r.kind_of?(Net::HTTPSuccess)
             begin
               tempfile = stream_to_tempfile(url, r, &block)

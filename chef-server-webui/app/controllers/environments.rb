@@ -79,6 +79,11 @@ class Environments < Application
   # GET /environments/:id/edit
   def edit
     load_environment
+    if @environment.name == "_default"
+      msg = { :warning => "The '_default' environment cannot be edited." }
+      redirect(url(:environments), :message => msg)
+      return
+    end
     load_cookbooks
     render
   end
@@ -190,7 +195,7 @@ class Environments < Application
   def load_cookbooks
     begin
       # @cookbooks is a hash, keys are cookbook names, values are their URIs.
-      @cookbooks = Chef::REST.new(Chef::Config[:chef_server_url]).get_rest("cookbooks").keys
+      @cookbooks = Chef::REST.new(Chef::Config[:chef_server_url]).get_rest("cookbooks").keys.sort
     rescue Net::HTTPServerException => e
       Chef::Log.error(format_exception(e))
       redirect(url(:new_environment), :message => { :error => "Could not load the list of available cookbooks."})
@@ -215,5 +220,16 @@ class Environments < Application
     cookbook_version_constraints
   end
 
+  def cookbook_version_constraints
+    @environment.cookbook_versions.inject({}) do |ans, (cb, vc)|
+      op, version = vc.split(" ")
+      ans[cb] = { "version" => version, "op" => op }
+      ans
+    end
+  end
+
+  def constraint_operators
+    %w(~> >= > = < <=)
+  end
 
 end

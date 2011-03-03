@@ -20,6 +20,8 @@ require 'chef/environment'
 
 class Environments < Application
 
+  include Merb::CookbookVersionHelper
+
   provides :json
 
   before :authenticate_every
@@ -87,21 +89,44 @@ class Environments < Application
   end
 
   # GET /environments/:environment_id/cookbooks
+  # returns data in the format of:
+  # {"apache2" => {
+  #     :url => "http://url",
+  #     :versions => [{:url => "http://url/1.0.0", :version => "1.0.0"}, {:url => "http://url/0.0.1", :version=>"0.0.1"}]
+  #   }
+  # }
   def list_cookbooks
     begin
       filtered_cookbooks = Chef::Environment.cdb_load_filtered_cookbook_versions(params[:environment_id])
     rescue Chef::Exceptions::CouchDBNotFound
       raise NotFound, "Cannot load environment #{params[:environment_id]}"
     end
-
+    num_versions = num_versions!
     display(filtered_cookbooks.inject({}) {|res, (cookbook_name,versions)|
-      # TODO:
-      # For now, we are only displaying the last cookbook in the sorted list (the newest version).
-      # We should display every cookbook version that is available in a given environment
-      # [stephen 9/2/10]
-      res[cookbook_name] = absolute_url(:cookbook_version, :cookbook_name=>cookbook_name, :cookbook_version=>versions.last.version)
+      versions.map!{|v| v.version.to_s}
+      res[cookbook_name] = expand_cookbook_urls(cookbook_name, versions, num_versions)
       res
     })
+  end
+
+  # GET /environments/:environment_id/cookbooks/:cookbook_id
+  # returns data in the format of:
+  # {"apache2" => {
+  #     :url => "http://url",
+  #     :versions => [{:url => "http://url/1.0.0", :version => "1.0.0"}, {:url => "http://url/0.0.1", :version=>"0.0.1"}]
+  #   }
+  # }
+  def cookbook
+    cookbook_name = params[:cookbook_id]
+    begin
+      filtered_cookbooks = Chef::Environment.cdb_load_filtered_cookbook_versions(params[:environment_id])
+    rescue Chef::Exceptions::CouchDBNotFound
+      raise NotFound, "Cannot load environment #{params[:environment_id]}"
+    end
+    raise NotFound, "Cannot load cookbook #{cookbook_name}" unless filtered_cookbooks.has_key?(cookbook_name)
+    versions = filtered_cookbooks[cookbook_name].map{|v| v.version.to_s}
+    num_versions = num_versions!("all")
+    display({ cookbook_name => expand_cookbook_urls(cookbook_name, versions, num_versions) })
   end
 
   # GET /environments/:environment/recipes
@@ -114,7 +139,7 @@ class Environments < Application
     node_list = Chef::Node.cdb_list_by_environment(params[:environment_id])
     display(node_list.inject({}) {|r,n| r[n] = absolute_url(:node, n); r})
   end
-  
+
   # GET /environments/:environment_id/roles/:role_id
   def role
     begin

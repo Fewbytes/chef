@@ -21,7 +21,7 @@ require 'chef/config'
 require 'chef/rest'
 require 'chef/log'
 require 'digest/sha2'
-require 'chef/json'
+require 'chef/json_compat'
 
 # We want to fail on create if uuidtools isn't installed
 begin
@@ -234,6 +234,14 @@ class Chef
     def view_uri(design, view)
       "#{couchdb_database}/_design/#{design}/_view/#{view}"
     end
-    
+
+    def server_stats
+      @rest.get_rest('/')
+    end
+ 
+    def db_stats
+      @rest.get_rest("/#{@db}")
+    end
+ 
   end
 end

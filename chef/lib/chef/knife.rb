@@ -28,10 +28,6 @@ class Chef
     include Mixlib::CLI
     extend Chef::Mixin::ConvertToClassName
 
-    # The "require paths" of the core knife subcommands bundled with chef
-    DEFAULT_SUBCOMMAND_FILES = Dir[File.expand_path(File.join(File.dirname(__FILE__), 'knife', '*.rb'))]
-    DEFAULT_SUBCOMMAND_FILES.map! { |knife_file| knife_file[/#{CHEF_ROOT}#{Regexp.escape(File::SEPARATOR)}(.*)\.rb/,1] }
-
     attr_accessor :name_args
 
     def self.msg(msg="")
@@ -91,7 +87,7 @@ class Chef
 
     # Load all the sub-commands
     def self.load_commands
-      DEFAULT_SUBCOMMAND_FILES.each { |subcommand| require subcommand }
+      find_subcommand_files.each { |subcommand| require subcommand }
       subcommands
     end
 
@@ -188,6 +184,62 @@ class Chef
       (args.any? { |arg| arg =~ /^(:?(:?\-\-)?help|\-h)$/})
     end
 
+    @@chef_config_dir = nil
+
+    # search upward from current_dir until .chef directory is found
+    def self.chef_config_dir
+      if @@chef_config_dir.nil? # share this with subclasses
+        @@chef_config_dir = false
+        full_path = Dir.pwd.split(File::SEPARATOR)
+        (full_path.length - 1).downto(0) do |i|
+          canidate_directory = File.join(full_path[0..i] + [".chef" ])
+          if File.exist?(canidate_directory) && File.directory?(canidate_directory)
+            @@chef_config_dir = canidate_directory
+            break
+          end
+        end
+      end
+      @@chef_config_dir
+    end
+
+    # Returns an Array of paths to knife commands located in chef_config_dir/plugins/knife/
+    # and ~/.chef/plugins/knife/
+    def self.site_subcommands
+      user_specific_files = []
+
+      if chef_config_dir
+        user_specific_files.concat Dir.glob(File.expand_path("plugins/knife/*.rb", chef_config_dir))
+      end
+
+      # finally search ~/.chef/plugins/knife/*.rb
+      user_specific_files.concat Dir.glob(File.join(ENV['HOME'], '.chef', 'plugins', 'knife', '*.rb'))
+
+      user_specific_files.map! { |path| path[/(.+).rb/, 1] }
+      user_specific_files
+    end
+
+    # Returns an Array of paths to knife commands built-in to chef, or installed via gem.
+    # If rubygems is not installed, falls back to globbing the knife directory.
+    def self.gem_and_builtin_subcommands
+      begin
+        # search all gems for chef/knife/*.rb
+        require 'rubygems'
+        files = Gem.find_files 'chef/knife/*.rb'
+        files.map! do |file|
+          file[/(#{Regexp.escape File.join('chef', 'knife', '')}.*\.rb)/, 1]
+        end.uniq!
+      rescue LoadError
+        # The "require paths" of the core knife subcommands bundled with chef
+        files = Dir[File.expand_path(File.join(File.dirname(__FILE__), 'knife', '*.rb'))]
+        files.map! { |knife_file| knife_file[/#{CHEF_ROOT}#{Regexp.escape(File::SEPARATOR)}(.*)\.rb/,1] }
+      end
+      files
+    end
+
+    def self.find_subcommand_files
+      @@subcommand_files ||= (gem_and_builtin_subcommands + site_subcommands).flatten.uniq
+    end
+
     public
 
     # Create a new instance of the current class configured for the given
@@ -244,13 +296,9 @@ class Chef
 
     def configure_chef
       unless config[:config_file]
-        full_path = Dir.pwd.split(File::SEPARATOR)
-        (full_path.length - 1).downto(0) do |i|
-          config_file_to_check = File.join([ full_path[0..i], ".chef", "knife.rb" ].flatten)
-          if File.exists?(config_file_to_check)
-            config[:config_file] = config_file_to_check 
-            break
-          end
+        if self.class.chef_config_dir
+          candidate_config = File.expand_path('knife.rb',self.class.chef_config_dir)
+          config[:config_file] = candidate_config if File.exist?(candidate_config)
         end
         # If we haven't set a config yet and $HOME is set, and the home
         # knife.rb exists, use it:
@@ -298,7 +346,7 @@ class Chef
     def output(data)
       case config[:format]
       when "json", nil
-        stdout.puts Chef::JSON.to_json_pretty(data)
+        stdout.puts Chef::JSONCompat.to_json_pretty(data)
       when "yaml"
         require 'yaml'
         stdout.puts YAML::dump(data)
@@ -350,8 +398,19 @@ class Chef
       end
     end
 
+    def format_cookbook_list_for_display(item)
+      if config[:with_uri]
+        item
+      else
+        item.inject({}){|result, (k,v)|
+          result[k] = v["versions"].inject([]){|res, ver| res.push(ver["version"]); res}
+          result
+        }
+      end
+    end
+
     def edit_data(data, parse_output=true)
-      output = Chef::JSON.to_json_pretty(data)
+      output = Chef::JSONCompat.to_json_pretty(data)
       
       if (!config[:no_editor])
         filename = "knife-edit-"
@@ -369,7 +428,7 @@ class Chef
         File.unlink(filename)
       end
 
-      parse_output ? Chef::JSON.from_json(output) : output
+      parse_output ? Chef::JSONCompat.from_json(output) : output
     end
 
     def confirm(question, append_instructions=true)
@@ -422,7 +481,7 @@ class Chef
 
       case from_file
       when /\.(js|json)$/
-        Chef::JSON.from_json(IO.read(filename))
+        Chef::JSONCompat.from_json(IO.read(filename))
       when /\.rb$/
         r = klass.new
         r.from_file(filename)
@@ -452,8 +511,8 @@ class Chef
       # We wouldn't have to do these shenanigans if all the editable objects 
       # implemented to_hash, or if to_json against a hash returned a string 
       # with stable key order.
-      object_parsed_again = Chef::JSON.from_json(Chef::JSON.to_json(object), :create_additions => false)
-      output_parsed_again = Chef::JSON.from_json(Chef::JSON.to_json(output), :create_additions => false)
+      object_parsed_again = Chef::JSONCompat.from_json(Chef::JSONCompat.to_json(object), :create_additions => false)
+      output_parsed_again = Chef::JSONCompat.from_json(Chef::JSONCompat.to_json(output), :create_additions => false)
       if object_parsed_again != output_parsed_again
         output.save
         self.msg("Saved #{output}")
