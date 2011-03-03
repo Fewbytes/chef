@@ -35,6 +35,7 @@ Merb::Router.prepare do
   # Environments
   resources :environments do |e|
     e.match("/cookbooks", :method => "get").to(:controller=>"environments", :action=>"list_cookbooks")
+    e.match("/recipes", :method => "get").to(:controller=>"environments", :action=>"list_recipes")
     e.match("/nodes", :method => "get").to(:controller=>"environments", :action=>"list_nodes")
     e.match("/roles/:role_id", :method => "get").to(:controller=>"environments", :action => "role")
   end
@@ -51,6 +52,7 @@ Merb::Router.prepare do
 
   # Search
   resources :search
+  match('/search', :method => 'get').to(:controller => 'search', :action => 'index').name(:search)
   match('/search/reindex', :method => 'post').to(:controller => "search", :action => "reindex")
 
   # Cookbooks
@@ -58,7 +60,7 @@ Merb::Router.prepare do
 
   match("/cookbooks",
         :method => 'get'
-        ).to(:controller => "cookbooks", :action => "index")
+        ).to(:controller => "cookbooks", :action => "index").name(:cookbooks)
 
   match("/cookbooks/_latest", :method=>'get').to(:controller=>'cookbooks',:action=>'index_latest')
 

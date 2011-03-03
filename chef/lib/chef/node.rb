@@ -219,7 +219,6 @@ class Chef
     end
 
     def chef_environment(arg=nil)
-      @run_list.chef_environment(arg)
       set_or_return(
         :chef_environment,
         arg,
@@ -347,12 +346,11 @@ class Chef
     # run_state[:seen_recipes], which is populated by include_recipe
     # statements in the DSL (and thus would not be in the run list).
     #
-    # NOTE: We believe this is dead code, but if it's not, please
-    # email chef-dev@opscode.com. [cw,timh]
-#     def recipe?(recipe_name)
-#       run_list.include?(recipe_name) || run_state[:seen_recipes].include?(recipe_name)
-#     end
-
+    # NOTE: It's used by cookbook authors
+    def recipe?(recipe_name)
+      run_list.include?(recipe_name) || run_state[:seen_recipes].include?(recipe_name)
+    end
+ 
     # Returns true if this Node expects a given role, false if not.
     def role?(role_name)
       run_list.include?("role[#{role_name}]")
@@ -420,15 +418,15 @@ class Chef
     # on the command line)
     #
     # Returns the fully-expanded list of recipes.
-    #
+    #--
     # TODO: timh/cw, 5-14-2010: Should this method exist? Should we
     # instead modify default_attrs and override_attrs whenever our
     # run_list is mutated? Or perhaps do something smarter like
     # on-demand generation of default_attrs and override_attrs,
     # invalidated only when run_list is mutated?
     def expand!
-      # This call should only be called on a chef-client run.
-      expansion = run_list.expand('server')
+      # This call should only be called on a chef-client run if you're going to save it later
+      expansion = run_list.expand('server', :environment => chef_environment)
       raise Chef::Exceptions::MissingRole if expansion.errors?
 
       self[:tags] = Array.new unless attribute?(:tags)

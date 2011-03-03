@@ -18,6 +18,8 @@
 # limitations under the License.
 #
 
+require 'forwardable'
+
 require 'chef/config'
 require 'chef/mixin/params_validate'
 require 'chef/mixin/from_file'
@@ -29,6 +31,8 @@ require 'chef/json'
 
 class Chef
   class DataBagItem
+
+    extend Forwardable
     
     include Chef::Mixin::FromFile
     include Chef::Mixin::ParamsValidate
@@ -58,6 +62,9 @@ class Chef
         }
       }
     }
+
+    # Define all Hash's instance methods as delegating to @raw_data
+    def_delegators(:@raw_data, *(Hash.instance_methods - Object.instance_methods))
 
     attr_accessor :couchdb_rev, :couchdb_id, :couchdb
     attr_reader :raw_data
@@ -134,7 +141,13 @@ class Chef
       result["_rev"] = @couchdb_rev if @couchdb_rev
       result.to_json(*a)
     end
-    
+
+    def self.from_hash(h)
+      item = new
+      item.raw_data = h
+      item
+    end
+
     # Create a Chef::DataBagItem from JSON
     def self.json_create(o)
       bag_item = new
@@ -156,11 +169,6 @@ class Chef
       bag_item
     end
 
-    # The Data Bag Item behaves like a hash - we pass all that stuff along to @raw_data.
-    def method_missing(method_symbol, *args, &block) 
-      self.raw_data.send(method_symbol, *args, &block)
-    end
-    
     # Load a Data Bag Item by name from CouchDB
     def self.cdb_load(data_bag, name, couchdb=nil)
       (couchdb || Chef::CouchDB.new).load("data_bag_item", object_name(data_bag, name))
@@ -168,7 +176,14 @@ class Chef
     
     # Load a Data Bag Item by name via RESTful API
     def self.load(data_bag, name)
-      Chef::REST.new(Chef::Config[:chef_server_url]).get_rest("data/#{data_bag}/#{name}")
+      item = Chef::REST.new(Chef::Config[:chef_server_url]).get_rest("data/#{data_bag}/#{name}")
+      if item.kind_of?(DataBagItem)
+        item
+      else
+        item = from_hash(item)
+        item.data_bag(data_bag)
+        item
+      end
     end
     
     # Remove this Data Bag Item from CouchDB
@@ -208,10 +223,21 @@ class Chef
     def self.create_design_document(couchdb=nil)
       (couchdb || Chef::CouchDB.new).create_design_document("data_bag_items", DESIGN_DOCUMENT)
     end
-    
+
+    def ==(other)
+      other.respond_to?(:to_hash) &&
+      other.respond_to?(:data_bag) &&
+      (other.to_hash == to_hash) &&
+      (other.data_bag.to_s == data_bag.to_s)
+    end
+
     # As a string
     def to_s
       "data_bag_item[#{id}]"
+    end
+
+    def inspect
+      "data_bag_item[#{data_bag.inspect}, #{raw_data['id'].inspect}, #{raw_data.inspect}]"
     end
 
     def pretty_print(pretty_printer)

@@ -23,11 +23,15 @@ Merb::Router.prepare do
 
   resources :clients, :id => /[^\/]+/
   resources :roles
+
   resources :environments do |e|
+    e.match("/recipes", :method => "get").to(:controller=>"environments", :action=>"list_recipes")
     e.match("/cookbooks").to(:contoller => "environments", :action => "list_cookbooks").name(:cookbooks)
     e.match("/nodes").to(:controller => "environments", :action => "list_nodes").name(:nodes)
     e.match("/select").to(:controller => "environments", :action => "select_environment").name(:select)
   end
+
+  #match('/environments/create').to(:controller => "environments", :action => "create").name(:environments_create)
 
   match("/status").to(:controller => "status", :action => "index").name(:status)
 
@@ -52,9 +56,10 @@ Merb::Router.prepare do
   match("/cookbooks/:cookbook_id/attributes", :cookbook_id => /[\w\.]+/).to(:controller => "cookbook_attributes", :action => "index")
   match("/cookbooks/:cookbook_id/files", :cookbook_id => /[\w\.]+/).to(:controller => "cookbook_files", :action => "index")
 
+  match("/cookbooks/:cookbook_id", :cookbook_id => /[\w\.]+/, :method => 'get').to(:controller => "cookbooks", :action => "cb_versions")
   match("/cookbooks/:cookbook_id/:cb_version", :cb_version => /[\w\.]+/, :method => 'get').to(:controller => "cookbooks", :action => "show").name(:show_specific_version_cookbook)
   resources :cookbooks
-  
+
   resources :clients
 
   match("/databags/:databag_id/databag_items", :method => 'get').to(:controller => "databags", :action => "show", :id=>":databag_id")
