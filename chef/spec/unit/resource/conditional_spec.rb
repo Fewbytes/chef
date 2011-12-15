@@ -22,8 +22,7 @@ require 'ostruct'
 describe Chef::Resource::Conditional do
   before do
     Mixlib::ShellOut.any_instance.stub(:run_command).and_return(nil)
-    @status = OpenStruct.new(:success? => true)
-    Mixlib::ShellOut.any_instance.stub(:status).and_return(@status)
+    Mixlib::ShellOut.any_instance.stub(:exitstatus).and_return(0)
   end
 
   describe "when created as an `only_if`" do
@@ -39,12 +38,23 @@ describe Chef::Resource::Conditional do
 
     describe "after running a negative/false command" do
       before do
-        @status.send("success?=", false)
+        Mixlib::ShellOut.any_instance.stub(:exitstatus).and_return(1)
         @conditional = Chef::Resource::Conditional.only_if("false")
       end
 
       it "indicates that resource convergence should not continue" do
         @conditional.continue?.should be_false
+      end
+    end
+
+    describe "after running a command that should return 255" do
+      before do
+        Mixlib::ShellOut.any_instance.stub(:exitstatus).and_return(255)
+        @conditional = Chef::Resource::Conditional.only_if("false", :returns => [255])
+      end
+
+      it "indicates that resource convergence should continue" do
+        @conditional.continue?.should be_true
       end
     end
 
@@ -60,6 +70,7 @@ describe Chef::Resource::Conditional do
 
     describe "after running a block that returns a falsey value" do
       before do
+        Mixlib::ShellOut.any_instance.stub(:exitstatus).and_return(1)
         @conditional = Chef::Resource::Conditional.only_if { nil }
       end
 
@@ -82,7 +93,7 @@ describe Chef::Resource::Conditional do
 
     describe "after running a failed/false command" do
       before do
-        @status.send("success?=", false)
+        Mixlib::ShellOut.any_instance.stub(:exitstatus).and_return(1)
         @conditional = Chef::Resource::Conditional.not_if("false")
       end
 

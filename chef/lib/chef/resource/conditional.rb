@@ -73,7 +73,12 @@ class Chef
       end
 
       def evaluate_command
-        shell_out(@command, @command_opts).status.success?
+        begin
+          shell_out(@command, @command_opts).error!
+          true
+        rescue ::Mixlib::ShellOut::ShellCommandFailed
+          false
+        end
       end
 
       def evaluate_block
