@@ -535,6 +535,11 @@ F
       rname = filename_to_qualified_string(cookbook_name, filename)
 
       # Add log entry if we override an existing light-weight resource.
+      return build_resource_class(rname, filename, run_context)
+
+    end
+
+    def self.build_resource_class(rname, filename=nil, run_context,  &block)
       class_name = convert_to_class_name(rname)
       overriding = Chef::Resource.const_defined?(class_name)
       Chef::Log.info("#{class_name} light-weight resource already initialized -- overriding!") if overriding
@@ -573,12 +578,16 @@ F
             actions_to_create.push(*action_names)
           end
         end
+        
 
         # set the run context in the class instance variable
         cls.run_context = run_context
 
         # load resource definition from file
-        cls.class_from_file(filename)
+        cls.class_from_file(filename) if filename
+
+        # build resource from block
+        cls.class_eval &block if block
 
         # create a new constructor that wraps the old one and adds the actions
         # specified in the DSL
@@ -594,11 +603,10 @@ F
       end
 
       # register new class as a Chef::Resource
-      class_name = convert_to_class_name(rname)
       Chef::Resource.const_set(class_name, new_resource_class)
       Chef::Log.debug("Loaded contents of #{filename} into a resource named #{rname} defined in Chef::Resource::#{class_name}")
 
-      new_resource_class
+      return new_resource_class
     end
 
     # Resources that want providers namespaced somewhere other than

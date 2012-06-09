@@ -104,7 +104,7 @@ class Chef
     def load_resource_definitions
       foreach_cookbook_load_segment(:definitions) do |cookbook_name, filename|
         Chef::Log.debug("Loading cookbook #{cookbook_name}'s definitions from #{filename}")
-        resourcelist = Chef::ResourceDefinitionList.new
+        resourcelist = Chef::ResourceDefinitionList.new self
         resourcelist.from_file(filename)
         definitions.merge!(resourcelist.defines) do |key, oldval, newval|
           Chef::Log.info("Overriding duplicate definition #{key}, new definition found in #{filename}")

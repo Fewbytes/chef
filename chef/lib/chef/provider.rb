@@ -85,7 +85,10 @@ class Chef
 
       def build_from_file(cookbook_name, filename, run_context)
         pname = filename_to_qualified_string(cookbook_name, filename)
+        build_provider_class(pname, filename, run_context)
+      end
 
+      def build_provider_class(pname, filename=nil, run_context, &block)
         # Add log entry if we override an existing light-weight provider.
         class_name = convert_to_class_name(pname)
         overriding = Chef::Provider.const_defined?(class_name)
@@ -109,11 +112,13 @@ class Chef
           end
 
           # load provider definition from file
-          cls.class_from_file(filename)
+          cls.class_from_file(filename) if filename
+
+          # load provider from block
+          cls.class_eval &block if block
         end
 
         # register new class as a Chef::Provider
-        pname = filename_to_qualified_string(cookbook_name, filename)
         class_name = convert_to_class_name(pname)
         Chef::Provider.const_set(class_name, new_provider_class)
         Chef::Log.debug("Loaded contents of #{filename} into a provider named #{pname} defined in Chef::Provider::#{class_name}")

@@ -24,14 +24,34 @@ class Chef
     include Chef::Mixin::FromFile
 
     attr_accessor :defines
+    attr_reader :run_context
 
-    def initialize
+    def initialize(run_context)
       @defines = Hash.new
+      @run_context = run_context
     end
 
     def define(resource_name, prototype_params=nil, &block)
-      @defines[resource_name] = ResourceDefinition.new
-      @defines[resource_name].define(resource_name, prototype_params, &block)
+      unless resource_name.kind_of?(Symbol)
+        raise ArgumentError, "You must use a symbol when defining a new resource!"
+      end
+      resource = ::Chef::Resource.build_resource_class(resource_name.to_s, nil, run_context) do
+        actions :synthetic
+        default_action :synthetic
+        # emulate array to mimic params behaviour
+        define_method "[]" do |m|
+          send(m)
+        end
+        prototype_params.each do |param_name, param|
+          attribute param_name, :default => param
+        end
+      end
+
+      provider = ::Chef::Provider.build_provider_class(resource_name.to_s, nil, run_context) do
+        alias :params :new_resource
+        self.action(:synthetic,  &block)
+      end
+
       true
     end
   end
